@@ -15,38 +15,6 @@ scheduled times and related tools. It is a fork of the original vixie-cron and
 has security and configuration enhancements like the ability to use pam and
 SELinux.
 
-%package anacron
-Summary:   Utility for running regular jobs
-Requires:  crontabs
-Group:     System Environment/Base
-Provides:  dailyjobs
-Provides:  anacron = 2.4
-Obsoletes: anacron <= 2.3
-Requires(post): coreutils
-Requires:  %{name} = %{version}-%{release}
-
-%description anacron
-Anacron is part of cronie that is used for running jobs with regular
-periodicity which do not have exact time of day of execution.
-
-The default settings of anacron execute the daily, weekly, and monthly
-jobs, but anacron allows setting arbitrary periodicity of jobs.
-
-Using anacron allows running the periodic jobs even if the system is often
-powered off and it also allows randomizing the time of the job execution
-for better utilization of resources shared among multiple systems.
-
-%package noanacron
-Summary:   Utility for running simple regular jobs in old cron style
-Group:     System Environment/Base
-Provides:  dailyjobs
-Requires:  crontabs
-Requires:  %{name} = %{version}-%{release}
-
-%description noanacron
-Old style of running {hourly,daily,weekly,monthly}.jobs without anacron. No
-extra features.
-
 %prep
 %setup -q
 
@@ -64,7 +32,6 @@ extra features.
 %if %{with inotify}
 --with-inotify \
 %endif
---enable-anacron \
 --enable-pie \
 --enable-relro
 
@@ -80,17 +47,9 @@ mkdir -pm755 $RPM_BUILD_ROOT%{_sysconfdir}/cron.d/
 %endif
 install -m 644 crond.sysconfig $RPM_BUILD_ROOT%{_sysconfdir}/sysconfig/crond
 touch $RPM_BUILD_ROOT%{_sysconfdir}/cron.deny
-#install -m 644 contrib/anacrontab $RPM_BUILD_ROOT%{_sysconfdir}/anacrontab
 install -c -m755 contrib/0hourly $RPM_BUILD_ROOT%{_sysconfdir}/cron.d/0hourly
 mkdir -pm 755 $RPM_BUILD_ROOT%{_sysconfdir}/cron.hourly
-#install -c -m755 contrib/0anacron $RPM_BUILD_ROOT%{_sysconfdir}/cron.hourly/0anacron
-mkdir -p $RPM_BUILD_ROOT/var/spool/anacron
-touch $RPM_BUILD_ROOT/var/spool/anacron/cron.daily
-touch $RPM_BUILD_ROOT/var/spool/anacron/cron.weekly
-touch $RPM_BUILD_ROOT/var/spool/anacron/cron.monthly
 
-# noanacron package
-#install -m 644 contrib/dailyjobs $RPM_BUILD_ROOT/%{_sysconfdir}/cron.d/dailyjobs
 
 # install systemd initscript
 mkdir -p $RPM_BUILD_ROOT/lib/systemd/system/
@@ -100,11 +59,6 @@ install -m 644 contrib/cronie.systemd $RPM_BUILD_ROOT/lib/systemd/system/crond.s
 # run after an installation
 %systemd_post crond.service
 
-%post anacron
-[ -e /var/spool/anacron/cron.daily ] || touch /var/spool/anacron/cron.daily 2>/dev/null || :
-[ -e /var/spool/anacron/cron.weekly ] || touch /var/spool/anacron/cron.weekly 2>/dev/null || :
-[ -e /var/spool/anacron/cron.monthly ] || touch /var/spool/anacron/cron.monthly 2>/dev/null || :
-
 %preun
 # run before a package is removed
 %systemd_preun crond.service
@@ -113,7 +67,6 @@ install -m 644 contrib/cronie.systemd $RPM_BUILD_ROOT/lib/systemd/system/crond.s
 # run after a package is removed
 %systemd_postun_with_restart crond.service
 
-%triggerun -- cronie-anacron < 1.4.1
 # empty /etc/crontab in case there are only old regular jobs
 cp -a /etc/crontab /etc/crontab.rpmsave
 sed -e '/^01 \* \* \* \* root run-parts \/etc\/cron\.hourly/d'\
@@ -159,20 +112,6 @@ exit 0
 #%config(noreplace) %{_sysconfdir}/cron.deny
 #%attr(0644,root,root) %config(noreplace) %{_sysconfdir}/cron.d/0hourly
 %attr(0644,root,root) /lib/systemd/system/crond.service
-
-%files anacron
-%{_sbindir}/anacron
-#%attr(0755,root,root) %{_sysconfdir}/cron.hourly/0anacron
-#%config(noreplace) %{_sysconfdir}/anacrontab
-%dir /var/spool/anacron
-%ghost %attr(0600,root,root) %verify(not md5 size mtime) /var/spool/anacron/cron.daily
-%ghost %attr(0600,root,root) %verify(not md5 size mtime) /var/spool/anacron/cron.weekly
-%ghost %attr(0600,root,root) %verify(not md5 size mtime) /var/spool/anacron/cron.monthly
-%{_mandir}/man5/anacrontab.*
-%{_mandir}/man8/anacron.*
-
-%files noanacron
-#%attr(0644,root,root) %config(noreplace) %{_sysconfdir}/cron.d/dailyjobs
 
 %changelog
 * Wed Feb 07 2018 Fedora Release Engineering <releng@fedoraproject.org> - 1.5.1-9
