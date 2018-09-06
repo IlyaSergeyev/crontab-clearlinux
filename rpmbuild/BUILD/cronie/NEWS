@@ -1,0 +1,30 @@
+cronie NEWS -- history of user-visible changes.
+
+Release 1.5.2
+
+* cronnext: New useful utility to find out time of the next job run.
+* crond: Avoid creating PID files when crond doesn't fork.
+* crontab: Do not try to replace the crontab with a directory.
+* crond: Log startup even when started in non-forking mode.
+* Multiple small cleanups and fixes.
+
+Release 1.5.1
+
+* crontab: Use temporary file name that is ignored by crond.
+* crond: Inherit PATH from the crond environment if -P option is used.
+* crond: Remove hardcoded "system_u" SELinux user, use the SELinux user
+  of the running crond.
+* anacron: Small cleanups and fixes.
+* crond: Fix longstanding race condition on repeated crontab modification.
+
+Release 1.5.0
+
+* First release with NEWS. :)
+* crond: Job environment variables are set also when executing sendmail.
+* crond: Adding duplicate orphans on reload is now prevented.
+* crond: The regular crond shutdown is now logged.
+* crontab: PAM is not called in crontab command if the caller's uid is 0.
+* crond: PAM is not called from crond for system cron jobs
+  (/etc/crontab, /etc/cron.d) which are run for uid 0.
+* crond: The existence of an user is checked at time when job is run
+  and not when the crontab is parsed on database reload.
