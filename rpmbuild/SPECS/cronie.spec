@@ -1,5 +1,3 @@
-%bcond_without inotify
-
 Summary:   Cron daemon for executing programs at set times
 Name:      cronie
 Version:   1.5.1
@@ -9,50 +7,85 @@ Group:     System Environment/Base
 URL:       https://github.com/cronie-crond/cronie
 Source0:   https://github.com/cronie-crond/cronie/releases/download/cronie-%{version}/cronie-%{version}.tar.gz
 
+Patch1:    cronie-1.5.1-power.patch
+Patch2:    cronie-1.5.1-y2038.patch
+
+Requires:  dailyjobs
+
+Obsoletes:        %{name}-sysvinit
+
+Requires(post):   coreutils sed
+
 %description
 Cronie contains the standard UNIX daemon crond that runs specified programs at
 scheduled times and related tools. It is a fork of the original vixie-cron and
 has security and configuration enhancements like the ability to use pam and
 SELinux.
 
+#%package anacron
+#Summary:   Utility for running regular jobs
+#Requires:  crontabs
+#Group:     System Environment/Base
+#Provides:  dailyjobs
+#Provides:  anacron = 2.4
+#Obsoletes: anacron <= 2.3
+#Requires(post): coreutils
+#Requires:  %{name} = %{version}-%{release}
+#
+#%description anacron
+#Anacron is part of cronie that is used for running jobs with regular
+#periodicity which do not have exact time of day of execution.
+#
+#The default settings of anacron execute the daily, weekly, and monthly
+#jobs, but anacron allows setting arbitrary periodicity of jobs.
+#
+#Using anacron allows running the periodic jobs even if the system is often
+#powered off and it also allows randomizing the time of the job execution
+#for better utilization of resources shared among multiple systems.
+
+%package noanacron
+Summary:   Utility for running simple regular jobs in old cron style
+Group:     System Environment/Base
+Provides:  dailyjobs
+#Requires:  crontabs
+Requires:  %{name} = %{version}-%{release}
+
+%description noanacron
+Old style of running {hourly,daily,weekly,monthly}.jobs without anacron. No
+extra features.
+
 %prep
 %setup -q
+%patch1 -p1 -b .power
+%patch2 -p1 -b .y2038
 
 %build
 %configure \
-%if %{with pam}
---with-pam \
-%endif
-%if %{with selinux}
---with-selinux \
-%endif
-%if %{with audit}
---with-audit \
-%endif
-%if %{with inotify}
---with-inotify \
-%endif
 --enable-pie \
---enable-relro
+--enable-relro \
+--sysconfdir=/usr/local/etc --libdir=/usr/lib64
 
 make %{?_smp_mflags}
 
 %install
-make install DESTDIR=$RPM_BUILD_ROOT DESTMAN=$RPM_BUILD_ROOT%{_mandir}
-mkdir -pm700 $RPM_BUILD_ROOT%{_localstatedir}/spool/cron
-mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/sysconfig/
-mkdir -pm755 $RPM_BUILD_ROOT%{_sysconfdir}/cron.d/
-%if ! %{with pam}
-    rm -f $RPM_BUILD_ROOT%{_sysconfdir}/pam.d/crond
-%endif
-install -m 644 crond.sysconfig $RPM_BUILD_ROOT%{_sysconfdir}/sysconfig/crond
-touch $RPM_BUILD_ROOT%{_sysconfdir}/cron.deny
-install -c -m755 contrib/0hourly $RPM_BUILD_ROOT%{_sysconfdir}/cron.d/0hourly
-mkdir -pm 755 $RPM_BUILD_ROOT%{_sysconfdir}/cron.hourly
 
+install -d $RPM_BUILD_ROOT/usr/local/etc/
+install -d $RPM_BUILD_ROOT/usr/local/etc/sysconfig/
+install -d $RPM_BUILD_ROOT/usr/local/etc/cron.d/
+
+make install DESTDIR=$RPM_BUILD_ROOT DESTMAN=$RPM_BUILD_ROOT%{_mandir}
+install -d $RPM_BUILD_ROOT%{_localstatedir}/spool/cron
+
+install -m 644 crond.sysconfig $RPM_BUILD_ROOT/usr/local/etc/sysconfig/crond
+touch $RPM_BUILD_ROOT/usr/local/etc/cron.deny
+install -c -m755 contrib/0hourly $RPM_BUILD_ROOT/usr/local/etc/cron.d/0hourly
+install -d $RPM_BUILD_ROOT/usr/local/etc/cron.hourly
+
+# noanacron package
+install -m 644 contrib/dailyjobs $RPM_BUILD_ROOT/usr/local/etc/cron.d/dailyjobs
 
 # install systemd initscript
-mkdir -p $RPM_BUILD_ROOT/lib/systemd/system/
+install -d $RPM_BUILD_ROOT/lib/systemd/system/
 install -m 644 contrib/cronie.systemd $RPM_BUILD_ROOT/lib/systemd/system/crond.service
 
 %post
@@ -67,14 +100,6 @@ install -m 644 contrib/cronie.systemd $RPM_BUILD_ROOT/lib/systemd/system/crond.s
 # run after a package is removed
 %systemd_postun_with_restart crond.service
 
-# empty /etc/crontab in case there are only old regular jobs
-cp -a /etc/crontab /etc/crontab.rpmsave
-sed -e '/^01 \* \* \* \* root run-parts \/etc\/cron\.hourly/d'\
-  -e '/^02 4 \* \* \* root run-parts \/etc\/cron\.daily/d'\
-  -e '/^22 4 \* \* 0 root run-parts \/etc\/cron\.weekly/d'\
-  -e '/^42 4 1 \* \* root run-parts \/etc\/cron\.monthly/d' /etc/crontab.rpmsave > /etc/crontab
-exit 0
-
 %triggerun -- cronie < 1.4.7-2
 # Save the current service runlevel info
 # User must manually run systemd-sysv-convert --apply crond
@@ -88,7 +113,7 @@ exit 0
 /bin/systemctl try-restart crond.service >/dev/null 2>&1 || :
 /bin/systemctl daemon-reload >/dev/null 2>&1 || :
 
-%triggerin -- pam, glibc, libselinux
+%triggerin -- glibc
 # changes in pam, glibc or libselinux can make crond crash
 # when it calls pam
 /bin/systemctl try-restart crond.service >/dev/null 2>&1 || :
@@ -104,14 +129,14 @@ exit 0
 %{_mandir}/man5/crontab.*
 %{_mandir}/man1/crontab.*
 %dir %{_localstatedir}/spool/cron
-#%dir %{_sysconfdir}/cron.d
-#%if %{with pam}
-#%attr(0644,root,root) %config(noreplace) %{_sysconfdir}/pam.d/crond
-#%endif
-#%config(noreplace) %{_sysconfdir}/sysconfig/crond
-#%config(noreplace) %{_sysconfdir}/cron.deny
-#%attr(0644,root,root) %config(noreplace) %{_sysconfdir}/cron.d/0hourly
-%attr(0644,root,root) /lib/systemd/system/crond.service
+%dir /usr/local/etc/cron.d
+%config(noreplace) /usr/local/etc/sysconfig/crond
+%config(noreplace) /usr/local/etc/cron.deny
+%attr(0644,root,root) %config(noreplace) /usr/local/etc/cron.d/0hourly
+%attr(0644,root,root) %config(noreplace) /lib/systemd/system/crond.service
+
+%files noanacron
+%attr(0644,root,root) %config(noreplace) /usr/local/etc/cron.d/dailyjobs
 
 %changelog
 * Wed Feb 07 2018 Fedora Release Engineering <releng@fedoraproject.org> - 1.5.1-9
