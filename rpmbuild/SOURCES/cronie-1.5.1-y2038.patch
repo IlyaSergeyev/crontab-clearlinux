@@ -1,0 +1,45 @@
+diff -up cronie-1.5.1/anacron/main.c.y2038 cronie-1.5.1/anacron/main.c
+--- cronie-1.5.1/anacron/main.c.y2038	2016-05-13 14:39:45.000000000 +0200
++++ cronie-1.5.1/anacron/main.c	2017-05-04 16:44:06.511862226 +0200
+@@ -371,17 +371,17 @@ record_start_time(void)
+ 		year, month, day_of_month);
+ }
+ 
+-static int
++static unsigned int
+ time_till(job_rec *jr)
+ /* Return the number of seconds that we have to wait until it's time
+  * to start job jr.
+  */
+ {
+-    unsigned int tj, tn;
++    time_t tj, tn;
+ 
+     if (now) return 0;
+     tn = time(NULL);
+-    tj = start_sec + jr->delay * 60;
++    tj = start_sec + (time_t)jr->delay * 60;
+     if (tj < tn) return 0;
+     if (tj - tn > 3600*24)
+     {
+@@ -389,7 +389,7 @@ time_till(job_rec *jr)
+ 	    jr->ident);
+ 	return 0;
+     }
+-    return tj - tn;
++    return (unsigned int)(tj - tn);
+ }
+ 
+ static void
+diff -up cronie-1.5.1/src/cron.c.y2038 cronie-1.5.1/src/cron.c
+--- cronie-1.5.1/src/cron.c.y2038	2015-02-05 16:29:17.000000000 +0100
++++ cronie-1.5.1/src/cron.c	2017-05-04 16:41:46.652390903 +0200
+@@ -563,7 +563,7 @@ static void find_jobs(int vtime, cron_db
+ 		 */
+ 		for (u = db->head; u != NULL; u = u->next) {
+ 		for (e = u->crontab; e != NULL; e = e->next) {
+-			time_t virtualSecond = (vtime - e->delay) * SECONDS_PER_MINUTE;
++			time_t virtualSecond = (time_t)(vtime - e->delay) * (time_t)SECONDS_PER_MINUTE;
+ 			time_t virtualGMTSecond = virtualSecond - vGMToff;
+ 			job_tz = env_get("CRON_TZ", e->envp);
+ 			maketime(job_tz, orig_tz);

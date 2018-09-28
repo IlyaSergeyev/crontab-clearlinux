@@ -1,0 +1,33 @@
+diff -up cronie-1.5.1/contrib/0anacron.power cronie-1.5.1/contrib/0anacron
+--- cronie-1.5.1/contrib/0anacron.power	2013-01-17 14:04:09.000000000 +0100
++++ cronie-1.5.1/contrib/0anacron	2016-09-05 10:53:50.000000000 +0200
+@@ -4,14 +4,24 @@ if test -r /var/spool/anacron/cron.daily
+     day=`cat /var/spool/anacron/cron.daily`
+ fi
+ if [ `date +%Y%m%d` = "$day" ]; then
+-    exit 0;
++    exit 0
+ fi
+ 
+ # Do not run jobs when on battery power
+-if test -x /usr/bin/on_ac_power; then
+-    /usr/bin/on_ac_power >/dev/null 2>&1
+-    if test $? -eq 1; then
+-    exit 0
++online=1
++for psupply in AC ADP0 ; do
++    sysfile="/sys/class/power_supply/$psupply/online"
++
++    if [ -f $sysfile ] ; then
++        if [ `cat $sysfile 2>/dev/null`x = 1x ]; then
++            online=1
++            break
++        else
++            online=0
++        fi
+     fi
++done
++if [ $online = 0 ]; then
++    exit 0
+ fi
+ /usr/sbin/anacron -s
